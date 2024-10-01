@@ -2,8 +2,6 @@ class Epics::HeaderRequest
   extend Forwardable
   attr_accessor :client
 
-  BASE36_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-
   PRODUCT_NAME = 'EPICS - a ruby ebics kernel'
   PRODUCT_LANG = 'de'
 
@@ -15,6 +13,7 @@ class Epics::HeaderRequest
 
   def build(options = {})
     options[:with_bank_pubkey_digests] = true if options[:with_bank_pubkey_digests].nil?
+    options[:security_medium] = 0 if options[:security_medium].nil?
 
     Nokogiri::XML::Builder.new do |xml|
       xml.header(authenticate: true) {
@@ -27,7 +26,7 @@ class Epics::HeaderRequest
           xml.Product(PRODUCT_NAME, 'Language' => PRODUCT_LANG)
           xml.OrderDetails {
             xml.OrderType options[:order_type]
-            xml.OrderID b36encode(client.next_order_id).rjust(4, '0') if client.version == Epics::Client::VERSION_H3
+            xml.OrderID b36encode(client.next_order_id) if client.version == Epics::Client::VERSION_H3
             xml.OrderAttribute options[:order_attribute]
             xml.StandardOrderParams {
               build_attributes(xml, options[:order_params])
@@ -37,7 +36,7 @@ class Epics::HeaderRequest
             xml.Authentication(client.bank_authentication_key.public_digest, Version: client.authentication_version, Algorithm: 'http://www.w3.org/2001/04/xmlenc#sha256')
             xml.Encryption(client.bank_encryption_key.public_digest, Version: client.encryption_version, Algorithm: 'http://www.w3.org/2001/04/xmlenc#sha256')
           } if options[:with_bank_pubkey_digests]
-          xml.SecurityMedium '0000'
+          xml.SecurityMedium b36encode(options[:security_medium]) if options[:security_medium]
           xml.NumSegments options[:num_segments] if options[:num_segments]
         }
         xml.mutable {
@@ -62,11 +61,6 @@ class Epics::HeaderRequest
   end
 
   def b36encode(number)
-    str = ''
-    while number > 0
-      number, i = number.divmod(36)
-      str += BASE36_ALPHABET[i]
-    end
-    str.empty? ? '0' : str
+    number.to_s(36).upcase.rjust(4, '0')
   end
 end
